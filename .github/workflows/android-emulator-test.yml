@@ -71,15 +71,40 @@ jobs:
 
       - name: Collect emulator diagnostics
         if: always()
+        timeout-minutes: 3
+        shell: bash
         run: |
+          set +e
           mkdir -p test-results
-          adb devices -l > test-results/adb-devices-after.txt 2>&1 || true
-          adb logcat -d -v threadtime > test-results/logcat-after.txt 2>&1 || true
-          adb shell getprop > test-results/system-properties.txt 2>&1 || true
-          adb shell dumpsys activity activities > test-results/activities-after.txt 2>&1 || true
+          printf 'Diagnostics started at %s\n' "$(date -Is)" > test-results/diagnostics-status.txt
+          printf 'Runner: %s\n' "$RUNNER_NAME" >> test-results/diagnostics-status.txt
+          printf '\nADB client version:\n' >> test-results/diagnostics-status.txt
+          adb version >> test-results/diagnostics-status.txt 2>&1
+          printf '\nADB processes before collection:\n' >> test-results/diagnostics-status.txt
+          ps aux | grep '[a]db' >> test-results/diagnostics-status.txt 2>&1
+
+          collect() {
+            name="$1"
+            shift
+            echo "Collecting $name (20-second limit)..."
+            timeout --signal=TERM --kill-after=5s 20s "$@" > "test-results/$name" 2>&1
+            rc=$?
+            echo "$name exit code: $rc" >> test-results/diagnostics-status.txt
+            if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+              echo "$name timed out" >> test-results/diagnostics-status.txt
+            fi
+            return 0
+          }
+
+          collect adb-devices-after.txt adb devices -l
+          collect logcat-after.txt adb logcat -d -v threadtime
+          collect system-properties.txt adb shell getprop
+          collect activities-after.txt adb shell dumpsys activity activities
+          printf '\nDiagnostics finished at %s\n' "$(date -Is)" >> test-results/diagnostics-status.txt
 
       - name: Upload APK and test diagnostics
         if: always()
+        timeout-minutes: 3
         uses: actions/upload-artifact@v4
         with:
           name: FileLens-Android-test-results
