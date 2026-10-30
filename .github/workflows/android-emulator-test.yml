@@ -7,36 +7,78 @@ on:
       - "app/**"
       - "*.gradle.kts"
       - ".github/workflows/android-emulator-test.yml"
+
 jobs:
   emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - uses: gradle/actions/setup-gradle@v4
+
       - name: Build APK
-        run: gradle assembleDebug
+        run: gradle --no-daemon assembleDebug
+
       - name: Install and launch on Android emulator
+        id: emulator-test
+        timeout-minutes: 12
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
           script: |
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.filelens.android/.MainActivity
+            set -Eeuo pipefail
+            mkdir -p test-results
+            trap 'rc=$?; echo "Smoke test exit code: $rc"; adb logcat -d -v threadtime > test-results/logcat.txt 2>&1 || true; adb shell screencap -p /sdcard/filelens-screen.png >/dev/null 2>&1 && adb pull /sdcard/filelens-screen.png test-results/screenshot.png >/dev/null 2>&1 || true; adb shell dumpsys activity activities > test-results/activities.txt 2>&1 || true; exit "$rc"' EXIT
+
+            echo "Waiting for Android boot completion (maximum 5 minutes)..."
+            timeout 300s bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done'
+            adb devices -l | tee test-results/adb-devices.txt
+
+            echo "Installing APK..."
+            timeout 120s adb install -r app/build/outputs/apk/debug/app-debug.apk | tee test-results/install.txt
+
+            echo "Launching FileLens..."
+            adb shell am force-stop com.filelens.android
+            adb shell am start -W -n com.filelens.android/.MainActivity | tee test-results/launch.txt
             sleep 8
-            adb shell pidof com.filelens.android
+
+            echo "Checking application process..."
+            adb shell pidof com.filelens.android | tee test-results/process.txt
+
+            echo "Checking visible UI..."
             adb shell uiautomator dump /sdcard/window.xml
-            adb pull /sdcard/window.xml window.xml
-            grep -q 'FileLens' window.xml
-            grep -q 'Dodaj i indeksuj PDF' window.xml
-      - uses: actions/upload-artifact@v4
+            adb pull /sdcard/window.xml test-results/window.xml
+            grep -q 'FileLens' test-results/window.xml
+            grep -q 'Dodaj i indeksuj PDF' test-results/window.xml
+            echo "SMOKE TEST PASSED"
+
+      - name: Collect emulator diagnostics
+        if: always()
+        run: |
+          mkdir -p test-results
+          adb devices -l > test-results/adb-devices-after.txt 2>&1 || true
+          adb logcat -d -v threadtime > test-results/logcat-after.txt 2>&1 || true
+          adb shell dumpsys activity activities > test-results/activities-after.txt 2>&1 || true
+          adb shell screencap -p /sdcard/filelens-screen-after.png >/dev/null 2>&1 && adb pull /sdcard/filelens-screen-after.png test-results/screenshot-after.png >/dev/null 2>&1 || true
+
+      - name: Upload APK and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: FileLens-Android-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: FileLens-Android-test-results
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
