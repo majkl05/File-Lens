@@ -38,7 +38,9 @@ jobs:
           arch: x86_64
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          disable-animations: true
+          # Do not let the action inject a key event during boot; this failed because
+          # Android's input service was not published on the previous emulator run.
+          disable-animations: false
           script: |
             set -Eeuo pipefail
             mkdir -p test-results
@@ -47,6 +49,9 @@ jobs:
             timeout 480s bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done'
             adb shell getprop ro.build.version.release | tee test-results/android-version.txt
             adb shell getprop sys.boot_completed | tee test-results/boot-completed.txt
+
+            echo "Checking Android input service (diagnostic only)..."
+            adb shell service check input 2>&1 | tee test-results/input-service.txt || true
 
             echo "Installing APK..."
             timeout 180s adb install -r app/build/outputs/apk/debug/app-debug.apk | tee test-results/install.txt
