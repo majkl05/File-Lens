@@ -1,45 +1,39 @@
 # FileLens
 
-FileLens is a Python desktop application for inspecting and searching files, with PDF support.
+Lokalna wyszukiwarka tekstu w dokumentach PDF dla Windows 10/11. Aplikacja indeksuje tekst w PDF-ach i przechowuje indeks lokalnie w SQLite FTS5.
 
-## Features
+## Wymagania
+- Windows 10/11
+- Python 3.10 lub nowszy
+- PDF-y muszą zawierać warstwę tekstową. Skanowane obrazy wymagają OCR, którego jeszcze nie ma.
 
-- Browse and inspect files through the application interface.
-- Index PDF documents and search their extracted text.
-- Open documents from search results.
-- Modular project structure separating the application UI and core functionality.
+## Uruchomienie
+Otwórz PowerShell w katalogu projektu:
 
-## Project structure
-
-```text
-.
-├── app.py
-├── core/
-├── ui/
-├── requirements.txt
-└── README.md
+```powershell
+py -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python app.py
 ```
 
-## Requirements
+## Jak używać
+1. Kliknij **Dodaj folder** i wybierz folder z plikami PDF (podfoldery też są przeszukiwane).
+2. Kliknij **Indeksuj PDF**. Indeksowanie działa w tle.
+3. Wpisz słowa lub frazę i kliknij **Szukaj**.
+4. Dwuklik na wyniku otwiera oryginalny PDF.
 
-- Python 3
-- Dependencies listed in `requirements.txt`
+Wyszukiwanie łączy wpisane słowa operatorem AND. Przykładowo `gwarancja pralka` znajdzie stronę zawierającą oba słowa. Wyszukiwanie ignoruje wielkość liter i normalizuje większość znaków diakrytycznych.
 
-## Run
+## Dane i prywatność
+Baza indeksu jest zapisywana lokalnie w `%LOCALAPPDATA%\FileLens\index.db`. Dokumenty nie są wysyłane do sieci. Zawartość PDF jest odczytywana lokalnie.
 
-1. Clone this repository.
-2. Install dependencies:
+## Ograniczenia obecnej wersji
+- Brak OCR dla skanów PDF, które są wyłącznie obrazami.
+- Obsługiwane są PDF-y; DOCX, XLSX i TXT dodamy w kolejnych etapach.
+- Po zmianie dokumentu należy ponownie uruchomić indeksowanie jego folderu.
+- Wyszukiwanie jest pełnotekstowe, nie jest jeszcze semantycznym AI.
 
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
-
-3. Start the application:
-
-   ```bash
-   python app.py
-   ```
-
-## Status
-
-The project is under active development. Feature availability and setup details may change as the codebase evolves.
+## Licencja
+MIT — zobacz plik LICENSE.
