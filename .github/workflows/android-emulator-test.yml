@@ -42,7 +42,7 @@ jobs:
           # Android's input service was not published on the previous emulator run.
           disable-animations: false
           script: |
-            set -Eeuo pipefail
+            set -eu
             mkdir -p test-results
             adb devices -l | tee test-results/adb-devices.txt
             echo "Waiting for Android boot completion (maximum 8 minutes)..."
