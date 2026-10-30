@@ -1,0 +1,60 @@
+name: Build and publish FileLens for Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Smoke-test application imports
+        run: |
+          python -c "import fitz; from PySide6.QtWidgets import QApplication; from ui.main_window import MainWindow; from core.database import SearchDatabase; print('FileLens imports OK')"
+
+      - name: Build standalone executable
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name FileLens --collect-all PySide6 --collect-all fitz --hidden-import=PySide6.QtSvg --hidden-import=PySide6.QtPrintSupport app.py
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/FileLens.exe")) { throw "FileLens.exe was not created" }
+          Get-Item "dist/FileLens.exe" | Format-List Name,Length
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.0
+          target_commitish: main
+          name: FileLens v0.2.0
+          body: |
+            Pierwsze wydanie binarne FileLens dla Windows 10/11.
+
+            - Samodzielny plik EXE zbudowany przez PyInstaller.
+            - Nie wymaga osobnej instalacji Pythona.
+            - Aplikacja indeksuje lokalne pliki PDF i wyszukuje tekst przez SQLite FTS5.
+
+            Uwaga: wydanie wymaga testu uruchomieniowego na komputerze użytkownika. Skanowane PDF-y bez warstwy tekstowej nie są obsługiwane (OCR nie jest jeszcze dostępny).
+          files: dist/FileLens.exe
+          fail_on_unmatched_files: true
+          make_latest: true
