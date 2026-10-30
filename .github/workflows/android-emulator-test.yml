@@ -1,0 +1,42 @@
+name: Android emulator smoke test
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-mvp]
+    paths:
+      - "app/**"
+      - "*.gradle.kts"
+      - ".github/workflows/android-emulator-test.yml"
+jobs:
+  emulator-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build APK
+        run: gradle assembleDebug
+      - name: Install and launch on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.filelens.android/.MainActivity
+            sleep 8
+            adb shell pidof com.filelens.android
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml window.xml
+            grep -q 'FileLens' window.xml
+            grep -q 'Dodaj i indeksuj PDF' window.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FileLens-Android-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
